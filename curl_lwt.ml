@@ -362,7 +362,11 @@ let set_req_options options t _ =
 
 let request ~redirect ?(options = []) set_opts uri =
   let options           = Curl.CURLOPT_URL uri :: options in
+  (* wrap_curl_perform_ro returns when we have a worker *)
   lwt (header_txt, ich) = wrap_curl_perform_ro ~redirect (set_opts options) in
+  let ()                =
+   Lwt.on_cancel header_txt
+     (fun () -> ignore (try_lwt Lwt_io.close ich with _ -> return ())) in
   lwt header_txt        =
     (* if there's a problem while reading the header, close the input
      * channel (so that Curl.perform completes) *)
