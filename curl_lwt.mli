@@ -49,6 +49,12 @@ val raw_post :
   data:string -> string ->
   (int * Netmime.mime_header_ro * Lwt_io.input Lwt_io.channel) Lwt.t
 
+(** Perform a multipart HTTP(S) POST. Refer to {!get}. *)
+val multipart_post :
+  ?redirect:bool -> ?options:Curl.curlOption list ->
+  Curl.curlHTTPPost list -> string ->
+  (int * Netmime.mime_header_ro * Lwt_io.input Lwt_io.channel) Lwt.t
+
 (** {2 Generic interface} *)
 
 (** [simple_request ~redirect ?options uri] initializes a Curl worker with

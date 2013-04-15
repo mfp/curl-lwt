@@ -467,3 +467,7 @@ let raw_post ?(redirect=true) ?(options = []) ~data uri =
     options
   in
     simple_request ~redirect ~options uri
+
+let multipart_post ?(redirect=true) ?(options = []) parts uri =
+  let options = Curl.CURLOPT_HTTPPOST parts :: options in
+    simple_request ~redirect ~options uri
