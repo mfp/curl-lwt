@@ -91,7 +91,7 @@ let rec worker_loop w =
           (Lwt_timeout.create !alarm_notice_period
              (fun () ->
                 ignore begin try_lwt
-                  Lwt_log.notice_f ~section
+                  Lwt_log.info_f ~section
                     "Curl request took longer than %ds.\n\
                      Request info:\n\
                      %s"
@@ -105,7 +105,7 @@ let rec worker_loop w =
       Curl.perform w.handle;
     with exn ->
       Lwt_preemptive.run_in_main
-        (fun () -> Lwt_log.error_f ~section ~exn "Curl.perform exception");
+        (fun () -> Lwt_log.debug_f ~section ~exn "Curl.perform exception");
       exn_r := Some exn
     end;
     Lwt_preemptive.run_in_main (fun () -> Lwt_timeout.stop timeout; return ());
