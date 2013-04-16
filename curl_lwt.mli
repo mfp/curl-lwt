@@ -44,20 +44,20 @@ val put :
   * to be urlencoded. The content-type is automatically set to
   * ["application/x-www-form-urlencoded"]; override this with
   * [CURL_HTTPHEADER] if needed. Refer to {!get}. *)
-val raw_post :
+val post_raw_data :
   ?redirect:bool -> ?options:Curl.curlOption list ->
   data:string -> string ->
   (int * Netmime.mime_header_ro * Lwt_io.input Lwt_io.channel) Lwt.t
 
 (** Perform a multipart HTTP(S) POST. Refer to {!get}. *)
-val multipart_post :
+val post_multipart :
   ?redirect:bool -> ?options:Curl.curlOption list ->
   Curl.curlHTTPPost list -> string ->
   (int * Netmime.mime_header_ro * Lwt_io.input Lwt_io.channel) Lwt.t
 
 (** {2 Generic interface} *)
 
-(** [simple_request ~redirect ?options uri] initializes a Curl worker with
+(** [simple_http_request ~redirect ?options uri] initializes a Curl worker with
   * the specified [options] and performs the request, returning the response
   * code, the parsed response header and the returned data as an input channel.
   * If [redirect] is true, [CURLOPT_FOLLOWLOCATION true] is automatically
@@ -67,12 +67,12 @@ val multipart_post :
   *
   * Note that the returned channel must be closed to ensure the Curl request
   * is finalized and the worker is released. *)
-val simple_request :
+val simple_http_request :
   redirect:bool -> ?options:Curl.curlOption list ->
   string -> (int * Netmime.mime_header_ro * Lwt_io.input Lwt_io.channel) Lwt.t
 
-(** [request ~redirect ?options setup uri] is analogous to
-  * [simple_request ~redirect ?options uri],
+(** [http_request ~redirect ?options setup uri] is analogous to
+  * [simple_http_request ~redirect ?options uri],
   * but allows to control the initialization of the [Curl.t] handler with the
   * [setup] function. [setup] is given the actual option list (which might defer
   * a bit from the supplied [options], e.g. by adding [Curl.CURLOPT_URL]),
@@ -80,7 +80,7 @@ val simple_request :
   * the request is considered complete by [Curl] (it can be used, for
   * instance, to close an input channel).
   * *)
-val request :
+val http_request :
   redirect:bool -> ?options:Curl.curlOption list ->
   (Curl.curlOption list -> Curl.t -> unit Lwt.t -> unit) ->
   string -> (int * Netmime.mime_header_ro * Lwt_io.input Lwt_io.channel) Lwt.t

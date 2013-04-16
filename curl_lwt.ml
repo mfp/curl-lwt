@@ -360,7 +360,7 @@ let set_req_options options t _ =
   reset t;
   List.iter (setopt t) (CURLOPT_NOSIGNAL true :: options)
 
-let request ~redirect ?(options = []) set_opts uri =
+let http_request ~redirect ?(options = []) set_opts uri =
   let options           = Curl.CURLOPT_URL uri :: options in
   (* wrap_curl_perform_ro returns when we have a worker *)
   lwt (header_txt, ich) = wrap_curl_perform_ro ~redirect (set_opts options) in
@@ -384,20 +384,20 @@ let request ~redirect ?(options = []) set_opts uri =
   let header = (new Netmime.basic_mime_header header_l :> Netmime.mime_header_ro) in
     return (code, header, ich)
 
-let simple_request ~redirect ?options uri =
-  request ~redirect ?options set_req_options uri
+let simple_http_request ~redirect ?options uri =
+  http_request ~redirect ?options set_req_options uri
 
 let get ?(redirect=true) ?(options = []) uri =
   let open Curl in
   let options = CURLOPT_NOBODY false :: CURLOPT_HTTPGET true ::
                 CURLOPT_FOLLOWLOCATION redirect :: options in
-    simple_request ~redirect ~options uri
+    simple_http_request ~redirect ~options uri
 
 let head ?(redirect=true) ?(options = []) uri =
   let open Curl in
   let options = CURLOPT_NOBODY true :: CURLOPT_HTTPGET true ::
                 CURLOPT_FOLLOWLOCATION redirect :: options in
-  lwt code, header, ich = simple_request ~redirect ~options uri in
+  lwt code, header, ich = simple_http_request ~redirect ~options uri in
     return (code, header)
 
 let put ?(redirect=true) ?(options = []) source uri =
@@ -448,7 +448,7 @@ let put ?(redirect=true) ?(options = []) source uri =
         None -> options
       | Some size -> Curl.CURLOPT_INFILESIZELARGE size :: options
   in
-    request ~redirect ~options
+    http_request ~redirect ~options
       (fun options t wait_finish ->
          set_req_options options t wait_finish;
          ignore begin
@@ -459,15 +459,15 @@ let put ?(redirect=true) ?(options = []) source uri =
          end)
       uri
 
-let raw_post ?(redirect=true) ?(options = []) ~data uri =
+let post_raw_data ?(redirect=true) ?(options = []) ~data uri =
   let options =
     Curl.CURLOPT_POST true ::
     Curl.CURLOPT_POSTFIELDS data ::
     Curl.CURLOPT_POSTFIELDSIZE (String.length data) ::
     options
   in
-    simple_request ~redirect ~options uri
+    simple_http_request ~redirect ~options uri
 
-let multipart_post ?(redirect=true) ?(options = []) parts uri =
+let post_multipart ?(redirect=true) ?(options = []) parts uri =
   let options = Curl.CURLOPT_HTTPPOST parts :: options in
-    simple_request ~redirect ~options uri
+    simple_http_request ~redirect ~options uri
