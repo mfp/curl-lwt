@@ -19,7 +19,7 @@ OCAMLFLAGS     += -annot -g -w +a-6-9-27..29-32..99 -warn-error +a-4-6-7-9-18-27
 OBJECTS[] =
    curl_lwt
 
-.PHONY: clean
+.PHONY: clean doc
 
 .DEFAULT: $(OCamlLibrary curl_lwt, $(OBJECTS))
 
@@ -34,6 +34,9 @@ section
     foreach(P, $(EXAMPLES))
     	OCamlProgram($(P), $(P))
 
+doc:
+	mkdir -p doc
+	ocamlfind ocamldoc -package curl,lwt,netstring -d doc -html *.mli
 
 clean:
-	rm -f $(filter-proper-targets $(ls R, .)) *.annot *.s
+	rm -rf $(filter-proper-targets $(ls R, .)) *.annot *.s doc
