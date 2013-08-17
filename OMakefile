@@ -14,8 +14,8 @@ if $(not $(OCAMLFIND_EXISTS))
    eprintln(You need to install ocamlfind and run "omake --configure".)
    exit 1
 
-OCAMLFINDFLAGS += -syntax camlp4o
-OCAMLFLAGS     += -annot -g -w +a-6-9-27..29-32..99 -warn-error +a-4-6-7-9-18-27..29-32..99 -thread
+OCAMLFINDFLAGS = -syntax camlp4o
+OCAMLFLAGS     = -bin-annot -g -w +a-4-6-9-27..29-32..99 -warn-error +a-4-6-7-9-18-27..29-32..99 -thread
 
 OBJECTS[] =
    curl_lwt
