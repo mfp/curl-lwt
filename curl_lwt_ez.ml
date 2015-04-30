@@ -236,7 +236,7 @@ let setup_output_chan ?buffer_size handle wait_perform_finish =
            if avail > 0 then begin
              (* can read from buffer *)
              let n = min avail wanted in
-               Lwt_bytes.blit_string_bytes !buffer !offset buf off n;
+               Lwt_bytes.blit_from_bytes !buffer !offset buf off n;
                offset := !offset + n;
                return n
            end else if !closed then return 0
@@ -249,7 +249,7 @@ let setup_output_chan ?buffer_size handle wait_perform_finish =
                else begin
                  let avail = String.length data in
                  let n = min wanted avail in
-                   Lwt_bytes.blit_string_bytes data 0 buf off n;
+                   Lwt_bytes.blit_from_bytes data 0 buf off n;
                    buffer := data;
                    offset := n;
                    wait_awaken := Lwt.task ();
