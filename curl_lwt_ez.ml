@@ -230,7 +230,9 @@ let setup_output_chan ?buffer_size handle wait_perform_finish =
   in
 
   let ch =
-    Lwt_io.make ?buffer_size ~mode:Lwt_io.input ~close
+    Lwt_io.make
+      ?buffer:(match buffer_size with None -> None | Some n -> Some (Lwt_bytes.create n))
+      ~mode:Lwt_io.input ~close
       (fun buf off wanted ->
          let avail = String.length !buffer - !offset in
            if avail > 0 then begin
