@@ -6,7 +6,6 @@ OCAMLPACKS[] =
    curl
    lwt.preemptive
    lwt.syntax
-   netstring
    pcre
 
 if $(not $(OCAMLFIND_EXISTS))

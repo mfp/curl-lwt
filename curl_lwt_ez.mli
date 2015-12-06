@@ -7,7 +7,24 @@
   * re-thrown in the main (Lwt) thread that called the function.
   * *)
 
+
+
+
 (** {2 Simplified interface for HTTP(S) requests } *)
+
+(** Order-preserving, case-insensitive HTTP field map. *)
+class type mime_header_ro =
+object
+
+  (** return complete header *)
+  method fields : (string * string) list
+
+  (** Return first header value or raises [Not_found] *)
+  method field  : string -> string
+
+  (** Return all fields with the same name. *)
+  method multiple_field : string -> string list
+end
 
 (** [get ~redirect ?options uri] initializes a Curl worker with
   * the specified [options] and performs the request, returning the response
@@ -21,12 +38,12 @@
   * is finalized and the worker is released. *)
 val get :
   ?redirect:bool -> ?options:Curl.curlOption list ->
-  string -> (int * Netmime.mime_header_ro * Lwt_io.input Lwt_io.channel) Lwt.t
+  string -> (int * mime_header_ro * Lwt_io.input Lwt_io.channel) Lwt.t
 
 (** Perform an HTTP(S) HEAD. Refer to {!get}. *)
 val head :
   ?redirect:bool ->
-  ?options:Curl.curlOption list -> string -> (int * Netmime.mime_header_ro) Lwt.t
+  ?options:Curl.curlOption list -> string -> (int * mime_header_ro) Lwt.t
 
 (** Perform an HTTP(S) PUT, with the provided data. Refer to {!get}.
   * The data to be PUT is either a string ([`Memory s]), held in a file
@@ -38,7 +55,7 @@ val put :
    | `File of Lwt_io.file_name
    | `Memory of string ] ->
   string ->
-  (int * Netmime.mime_header_ro * Lwt_io.input Lwt_io.channel) Lwt.t
+  (int * mime_header_ro * Lwt_io.input Lwt_io.channel) Lwt.t
 
 (** Perform an HTTP(S) POST, with the data provided in [~data], which is assumed
   * to be urlencoded. The content-type is automatically set to
@@ -47,13 +64,13 @@ val put :
 val post_raw_data :
   ?redirect:bool -> ?options:Curl.curlOption list ->
   data:string -> string ->
-  (int * Netmime.mime_header_ro * Lwt_io.input Lwt_io.channel) Lwt.t
+  (int * mime_header_ro * Lwt_io.input Lwt_io.channel) Lwt.t
 
 (** Perform a multipart HTTP(S) POST. Refer to {!get}. *)
 val post_multipart :
   ?redirect:bool -> ?options:Curl.curlOption list ->
   Curl.curlHTTPPost list -> string ->
-  (int * Netmime.mime_header_ro * Lwt_io.input Lwt_io.channel) Lwt.t
+  (int * mime_header_ro * Lwt_io.input Lwt_io.channel) Lwt.t
 
 (** {2 Generic interface} *)
 
@@ -69,7 +86,7 @@ val post_multipart :
   * is finalized and the worker is released. *)
 val simple_http_request :
   redirect:bool -> ?options:Curl.curlOption list ->
-  string -> (int * Netmime.mime_header_ro * Lwt_io.input Lwt_io.channel) Lwt.t
+  string -> (int * mime_header_ro * Lwt_io.input Lwt_io.channel) Lwt.t
 
 (** [http_request ~redirect ?options setup uri] is analogous to
   * [simple_http_request ~redirect ?options uri],
@@ -83,7 +100,7 @@ val simple_http_request :
 val http_request :
   redirect:bool -> ?options:Curl.curlOption list ->
   (Curl.curlOption list -> Curl.t -> unit Lwt.t -> unit) ->
-  string -> (int * Netmime.mime_header_ro * Lwt_io.input Lwt_io.channel) Lwt.t
+  string -> (int * mime_header_ro * Lwt_io.input Lwt_io.channel) Lwt.t
 
 (** {2 Internal machinery} *)
 (** Section used for Curl_lwt-generated logs. *)

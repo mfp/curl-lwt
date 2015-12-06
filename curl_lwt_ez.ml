@@ -39,6 +39,10 @@ let get_free_workers () =
 let set_max_threads n =
   if n >= 1 then max_threads := n
 
+let bprintf b fmt =
+  let to_b = Format.formatter_of_buffer b in
+    Format.fprintf to_b fmt
+
 let worker_info w =
   let pp fmt = function
       Curl.CURLINFO_String s -> Format.fprintf fmt "%S" s
@@ -50,7 +54,7 @@ let worker_info w =
 
   let b = Buffer.create 120 in
   let output n what =
-    Format.bprintf b "%s: %a\n" n pp (Curl.getinfo w.handle what)
+    bprintf b "%s: %a\n" n pp (Curl.getinfo w.handle what)
   in
     output "Effective URL" Curl.CURLINFO_EFFECTIVE_URL;
     output "Redirect URL" Curl.CURLINFO_REDIRECT_URL;
@@ -70,7 +74,7 @@ let worker_info w =
     output "Content-length download" Curl.CURLINFO_CONTENT_LENGTH_DOWNLOAD;
     output "Content-type" Curl.CURLINFO_CONTENT_TYPE;
     output "Num connects" Curl.CURLINFO_NUM_CONNECTS;
-    Format.bprintf b "Response header: %s"
+    bprintf b "Response header: %s%!"
       (match w.response_header with
            None -> "<None>\n"
          | Some s -> sprintf "\n%s\n" s);
@@ -362,6 +366,340 @@ let set_req_options options t _ =
   reset t;
   List.iter (setopt t) (CURLOPT_NOSIGNAL true :: options)
 
+
+(**************************************************************************)
+(**************************************************************************)
+(*************************  code taken from ocamlnet **********************)
+(**************************************************************************)
+(**************************************************************************)
+
+(* The following code carries these license terms:
+
+    Copyright (c) 2001-2006 Patrick Doane and Gerd Stolpmann
+
+    This software is provided 'as-is', without any express or implied
+    warranty. In no event will the authors be held liable for any damages
+    arising from the use of this software.
+
+    Permission is granted to anyone to use this software for any purpose,
+    including commercial applications, and to alter it and redistribute it
+    freely, subject to the following restrictions:
+
+    1. The origin of this software must not be misrepresented; you must
+    not claim that you wrote the original software. If you use this
+    software in a product, an acknowledgment in the product documentation
+    would be appreciated but is not required.
+
+    2. Altered source versions must be plainly marked as such, and must
+    not be misrepresented as being the original software.
+
+    3. This notice may not be removed or altered from any source
+    distribution.
+*)
+
+module HTTP_header :
+sig
+  val scan_header :
+    ?downcase:bool ->              (* default: true *)
+    ?unfold:bool ->                (* default: true *)
+    ?strip:bool ->                 (* default: false *)
+    string -> start_pos:int -> end_pos:int ->
+    ((string * string) list * int)
+end =
+struct
+  let rec find_line_start s pos len =
+    if len > 0 then
+      match s.[pos] with
+        | '\010' ->
+            pos+1
+        | '\013' ->
+            if len > 1 && s.[pos+1] = '\010' then
+              pos+2
+            else
+              find_line_start s (pos+1) (len-1)
+        | _ ->
+            find_line_start s (pos+1) (len-1)
+    else
+      raise Not_found
+
+
+  let rec find_line_end s pos len =
+    if len > 0 then
+      match s.[pos] with
+        | '\010' ->
+            pos
+        | '\013' ->
+            if len > 1 && s.[pos+1] = '\010' then
+              pos
+            else
+              find_line_end s (pos+1) (len-1)
+        | _ ->
+            find_line_end s (pos+1) (len-1)
+    else
+      raise Not_found
+
+
+  let rec find_double_line_start s pos len =
+    let pos' = find_line_start s pos len in
+    let len' = len - (pos' - pos) in
+    if len' > 0 then
+      match s.[pos'] with
+        | '\010' ->
+            pos'+1
+        | '\013' ->
+            if len' > 1 && s.[pos'+1] = '\010' then
+              pos'+2
+            else
+              find_double_line_start s pos' len'
+        | _ ->
+            find_double_line_start s pos' len'
+    else
+      raise Not_found
+
+
+  let fold_lines_p f acc0 s pos len =
+    let e = pos+len in
+    let rec loop acc p =
+      if p < e then (
+        let p1 =
+          try find_line_end s p (e-p)
+          with Not_found -> e in
+        let p2 =
+          try find_line_start s p1 (e-p1)
+          with Not_found -> e in
+        let is_last =
+          p2 = e in
+        let acc' =
+          f acc p p1 p2 is_last in
+        loop acc' p2
+      )
+      else acc in
+    loop acc0 pos
+
+
+  let skip_whitespace_left s pos len =
+    let e = pos+len in
+    let rec skip_whitespace p =
+      if p < e then (
+        let c = s.[p] in
+        match c with
+          | ' ' | '\t' | '\r' | '\n' -> skip_whitespace(p+1)
+          | _ -> p
+      )
+      else
+        raise Not_found in
+    skip_whitespace pos
+
+
+  let skip_whitespace_right s pos len =
+    let rec skip_whitespace p =
+      if p >= pos then (
+        let c = s.[p] in
+        match c with
+          | ' ' | '\t' | '\r' | '\n' -> skip_whitespace(p-1)
+          | _ -> p
+      )
+      else
+        raise Not_found in
+    skip_whitespace (pos+len-1)
+
+
+  type header_line =
+    | Header_start of string * string   (* name, value *)
+    | Header_cont of string             (* continued value *)
+    | Header_end                        (* empty line = header end *)
+
+
+  let rec find_colon s p e =
+    if p < e then (
+      let c = s.[p] in
+      match c with
+        | ' ' | '\t' | '\r' | '\n' -> raise Not_found
+        | ':' -> p
+        | _ -> find_colon s (p+1) e
+    )
+    else raise Not_found
+
+
+  let parse_header_line include_eol skip_ws s p0 p1 p2 is_last =
+    (* p0: start of line
+       p1: position of line terminator
+       p2: position after line terminator
+       is_last: whether last line in the iteration
+       include_eol: whether to include the line terminator in the output string
+       skip_ws: whether to skip whitespace after the ":"
+
+       Raises Not_found if not parsable.
+     *)
+    if p0 = p1 then (
+      if not is_last then raise Not_found;
+      Header_end
+    ) else (
+      let c0 = s.[p0] in
+      let is_cont = (c0 = ' ' || c0 = '\t' || c0 = '\r') in
+      if is_cont then (
+        let out =
+          if include_eol then
+            String.sub s p0 (p2-p0)
+          else
+            String.sub s p0 (p1-p0) in
+        Header_cont out
+      )
+      else (
+        let q = find_colon s p0 p1 in
+        let r =
+          if skip_ws then
+            try skip_whitespace_left s (q+1) (p1-q-1) with Not_found -> p1
+          else
+            q+1 in
+        let out_name = String.sub s p0 (q-p0) in
+        let out_value =
+          if include_eol then
+            String.sub s r (p2-r)
+          else
+            String.sub s r (p1-r) in
+        Header_start(out_name,out_value)
+      )
+    )
+
+
+  let fold_header ?(downcase=false) ?(unfold=false) ?(strip=false)
+                  f acc0 s pos len =
+    let err k =
+      failwith ("Netmime_string.fold_header [" ^ string_of_int k ^ "]") in
+    let postprocess cur =
+      match cur with
+        | None ->
+            None
+        | Some(n, values) ->
+            let cat_values1 =
+              String.concat "" (List.rev values) in
+            let cat_values2 =
+              if strip then
+                try
+                  let k =
+                    skip_whitespace_right
+                      cat_values1 0 (String.length cat_values1) in
+                  String.sub cat_values1 0 (k+1)
+                with Not_found -> cat_values1
+              else
+                cat_values1 in
+            let n' =
+              if downcase then String.lowercase n else n in
+            Some(n', cat_values2) in
+    let (user, cur, at_end) =
+      fold_lines_p
+        (fun (acc_user, acc_cur, acc_end) p0 p1 p2 is_last ->
+           if acc_end then err 1;
+           let hd =
+             try
+               parse_header_line
+                 (not unfold) strip s p0 p1 p2 is_last
+             with Not_found -> err 2 in
+           match hd with
+             | Header_start(n,v) ->
+                 let last_header_opt = postprocess acc_cur in
+                 let acc_cur' = Some(n, [v]) in
+                 let acc_user' =
+                   match last_header_opt with
+                     | None -> acc_user
+                     | Some(n,v) -> f acc_user n v in
+                 (acc_user', acc_cur', false)
+             | Header_cont v ->
+                 ( match acc_cur with
+                     | None -> err 3
+                     | Some(n, values) ->
+                         let acc_cur' = Some (n, (v::values)) in
+                         (acc_user, acc_cur', false)
+                 )
+             | Header_end ->
+                 let last_header_opt = postprocess acc_cur in
+                 let acc_user' =
+                   match last_header_opt with
+                     | None -> acc_user
+                     | Some(n,v) -> f acc_user n v in
+                 (acc_user', None, true)
+        )
+        (acc0, None, false)
+        s pos len in
+    if not at_end then err 4;
+    assert(cur = None);
+    user
+
+
+  let list_header ?downcase ?unfold ?strip s pos len =
+    List.rev
+      (fold_header
+         ?downcase ?unfold ?strip
+         (fun acc n v -> (n,v) :: acc)
+         [] s pos len
+      )
+
+
+  let find_end_of_header s pos len =
+    (* Returns the position after the header, or raises Not_found *)
+    if len > 0 && s.[pos]='\n' then
+      pos+1
+    else
+      if len > 1 && s.[pos]='\r' && s.[pos+1]='\n' then
+        pos+2
+      else
+        find_double_line_start s pos len
+
+
+  let scan_header ?(downcase=true)
+                  ?(unfold=true)
+                  ?(strip=false)
+                  parstr ~start_pos ~end_pos =
+    try
+      let real_end_pos =
+        find_end_of_header parstr start_pos (end_pos-start_pos) in
+      let values =
+        list_header
+          ~downcase ~unfold ~strip:(unfold || strip) parstr
+          start_pos (real_end_pos - start_pos) in
+      (values, real_end_pos)
+    with
+      | Not_found | Failure _ ->
+          failwith "Netmime_string.scan_header"
+end
+
+module CI : sig  (* case-insensitive strings *)
+  type t
+  val compare : t -> t -> int
+  val make : string -> t
+end = struct
+  type t = string
+  let compare (a_ci:t) (b_ci:t) =
+    Pervasives.compare a_ci b_ci
+  let make s = String.lowercase s
+end
+
+module CIMap = Map.Make(CI)
+  (* Maps from case-insensitive strings to any type *)
+
+(**************************************************************************)
+(**************************************************************************)
+(*************************  end of ocamlnet code     **********************)
+(**************************************************************************)
+(**************************************************************************)
+
+class mime_header_ro fields =
+object
+  val map = lazy begin
+              List.fold_left
+                (fun m (k, v) ->
+                   let k = CI.make k in
+                   let l = try CIMap.find k m with Not_found -> [] in
+                     CIMap.add k (v :: l) m)
+                CIMap.empty fields
+            end
+
+  method fields           = fields
+  method field k : string = List.hd (List.rev (CIMap.find (CI.make k) (Lazy.force map)))
+  method multiple_field k = List.rev (CIMap.find (CI.make k) (Lazy.force map))
+end
+
 let http_request ~redirect ?(options = []) set_opts uri =
   let options           = Curl.CURLOPT_URL uri :: options in
   (* wrap_curl_perform_ro returns when we have a worker *)
@@ -378,12 +716,12 @@ let http_request ~redirect ?(options = []) set_opts uri =
       raise_lwt e in
   let captures    = Pcre.extract ~rex:status_re header_txt in
   let code        = int_of_string captures.(2) in
-  let header_l, _ = Mimestring.scan_header
+  let header_l, _ = HTTP_header.scan_header
                       ~downcase:false ~unfold:true ~strip:true
                       ~start_pos:(String.length captures.(0))
                       ~end_pos:(String.length header_txt)
                       header_txt in
-  let header = (new Netmime.basic_mime_header header_l :> Netmime.mime_header_ro) in
+  let header = new mime_header_ro header_l in
     return (code, header, ich)
 
 let simple_http_request ~redirect ?options uri =
