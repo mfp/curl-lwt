@@ -24,6 +24,8 @@ object
 
   (** Return all fields with the same name. *)
   method multiple_field : string -> string list
+
+  method content_length : unit -> int
 end
 
 (** [get ~redirect ?options uri] initializes a Curl worker with

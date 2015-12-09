@@ -684,6 +684,9 @@ module CIMap = Map.Make(CI)
 (**************************************************************************)
 (**************************************************************************)
 
+let leading_space_re  = Pcre.regexp "^[ \t\r\n]+"
+let trailing_space_re = Pcre.regexp "[ \t\r\n]+$"
+
 class mime_header_ro fields =
 object
   val map = lazy begin
@@ -695,9 +698,17 @@ object
                 CIMap.empty fields
             end
 
-  method fields           = fields
-  method field k : string = List.hd (List.rev (CIMap.find (CI.make k) (Lazy.force map)))
-  method multiple_field k = List.rev (CIMap.find (CI.make k) (Lazy.force map))
+  val clen = lazy begin
+    let _, v = List.find (fun (k, _) -> String.lowercase k = "content-length") fields in
+      int_of_string
+        (Pcre.replace ~rex:leading_space_re
+           (Pcre.replace ~rex:trailing_space_re v))
+  end
+
+  method fields            = fields
+  method field k : string  = List.hd (List.rev (CIMap.find (CI.make k) (Lazy.force map)))
+  method multiple_field k  = List.rev (CIMap.find (CI.make k) (Lazy.force map))
+  method content_length () = Lazy.force clen
 end
 
 let http_request ~redirect ?(options = []) set_opts uri =
