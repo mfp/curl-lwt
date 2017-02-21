@@ -44,13 +44,18 @@ let bprintf b fmt =
     Format.fprintf to_b fmt
 
 let worker_info w =
+  let str_of_str_list l =
+    ("[" ^ String.concat "; " (List.map (sprintf "%S") l) ^ "]") in
+
   let pp fmt = function
       Curl.CURLINFO_String s -> Format.fprintf fmt "%S" s
     | Curl.CURLINFO_Long n -> Format.fprintf fmt "%d" n
     | Curl.CURLINFO_Double f -> Format.fprintf fmt "%f" f
-    | Curl.CURLINFO_StringList l ->
+    | Curl.CURLINFO_StringListList l ->
         Format.fprintf fmt "%s"
-          ("[" ^ String.concat "; " (List.map (sprintf "%S") l) ^ "]") in
+          ("[" ^ String.concat "; " (List.map str_of_str_list l) ^ "]")
+    | Curl.CURLINFO_StringList l ->
+        Format.fprintf fmt "%s" (str_of_str_list l) in
 
   let b = Buffer.create 120 in
   let output n what =
